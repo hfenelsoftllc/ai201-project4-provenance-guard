@@ -168,6 +168,50 @@ tests/test_gradio_ui.py       — html.escape() on creator_id, status, content_i
 
 ---
 
+## Stretch Features
+
+Four stretch features extending the required API:
+
+### S1 — Ensemble Detection (3 signals)
+
+A third signal, **Repetition Density**, measures the ratio of repeated bigrams — AI text over-samples high-probability token sequences and repeats itself; human writing varies more. Combined with a rebalanced weighted average:
+
+```
+confidence = 0.50 × llm_score + 0.30 × stylometric_score + 0.20 × repetition_score
+```
+
+`GET /log` entries include `repetition_score` alongside the existing signal scores.
+
+### S2 — Provenance Certificate
+
+A two-step "verified human" badge:
+
+1. `POST /verify` — creator submits `creator_id` + `attestation` (plain-text statement). Status: `pending`.
+2. `POST /verify/<creator_id>/approve` — moderator approves. Status: `verified`.
+
+`POST /submit` responses and `GET /log` entries include `creator_verified: true/false`. Verified creators see a ✓ badge in the Gradio UI.
+
+### S3 — Analytics Dashboard
+
+`GET /dashboard` — read-only, derived from existing audit log:
+
+```json
+{
+  "total_submissions": 42,
+  "attribution_distribution": {"likely_ai": 18, "likely_human": 16, "uncertain": 8},
+  "appeal_rate": 0.095,
+  "signal_agreement_rate": 0.714
+}
+```
+
+Signal agreement rate = % of submissions where LLM and stylometric scores agree on direction (both > 0.5 or both < 0.5).
+
+### S4 — Multi-Modal Support
+
+`POST /submit` accepts an optional `content_type` field (default: `"text"`). When `content_type: "image_description"`, the `text` field carries an image caption or alt-text; the LLM receives a prompt tuned for image description patterns; the stylometric signal returns 0.5 neutral (too structurally constrained for reliable SLV/TTR/PD). Existing callers unaffected.
+
+---
+
 ## Planning Document
 
 See [planning.md](planning.md) for the full architecture specification, detection signal design, confidence scoring thresholds, transparency label variants, appeals workflow, anticipated edge cases, and AI tool plan.
@@ -193,6 +237,9 @@ The two signals can disagree substantially — a text can have human-sounding se
 
 **Rate limiting scope:**
 Limits are per IP address, not per `creator_id`. A scripted attacker using multiple IPs bypasses the 10/minute limit. Production deployment would key limits on authenticated `creator_id` instead.
+
+**Provenance certificate endpoint has no authentication (S2):**
+`POST /verify/<creator_id>/approve` is unauthenticated — any caller can approve any creator. This is a privilege escalation in a real deployment. Production use requires gating this endpoint on a moderator credential (e.g. `Authorization: Bearer <token>` validated against a moderator allowlist). `POST /verify` also accepts a freely-chosen `creator_id`; production would bind it to the authenticated principal instead.
 
 ---
 

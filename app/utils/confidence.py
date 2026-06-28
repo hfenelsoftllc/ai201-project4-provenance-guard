@@ -1,9 +1,10 @@
 # app/utils/confidence.py
-# Confidence scoring: combines signal outputs into a single calibrated score.
+# Confidence scoring: combines three signal outputs into a single calibrated score.
 
 # Signal weights (must sum to 1.0)
-LLM_WEIGHT = 0.60
-STYLO_WEIGHT = 0.40
+LLM_WEIGHT = 0.50
+STYLO_WEIGHT = 0.30
+RD_WEIGHT = 0.20
 
 # Attribution thresholds
 LIKELY_AI_THRESHOLD = 0.65
@@ -14,8 +15,13 @@ ATTRIBUTION_LIKELY_HUMAN = "likely_human"
 ATTRIBUTION_UNCERTAIN = "uncertain"
 
 
-def compute_confidence(llm_score: float, stylometric_score: float) -> tuple:
-    confidence = round((LLM_WEIGHT * llm_score) + (STYLO_WEIGHT * stylometric_score), 4)
+def compute_confidence(llm_score: float, stylometric_score: float, repetition_score: float = 0.5) -> tuple:
+    confidence = round(
+        (LLM_WEIGHT * llm_score)
+        + (STYLO_WEIGHT * stylometric_score)
+        + (RD_WEIGHT * repetition_score),
+        4,
+    )
     attribution = (
         ATTRIBUTION_LIKELY_AI if confidence >= LIKELY_AI_THRESHOLD
         else ATTRIBUTION_LIKELY_HUMAN if confidence <= LIKELY_HUMAN_THRESHOLD

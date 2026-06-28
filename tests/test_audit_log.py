@@ -18,6 +18,8 @@ def _entry(**overrides):
         "confidence": 0.8,
         "llm_score": 0.9,
         "stylometric_score": 0.6,
+        "repetition_score": 0.7,
+        "content_type": "text",
         "status": "classified",
         "appeal_reasoning": None,
         "appeal_timestamp": None,
@@ -80,7 +82,6 @@ def test_get_entries_limit():
 
 
 def test_get_entries_newest_first():
-    import time
     for i in range(3):
         audit_log.write_entry(_entry(
             content_id=f"id-{i:04d}",
@@ -89,3 +90,42 @@ def test_get_entries_newest_first():
     entries = audit_log.get_entries()
     timestamps = [e["timestamp"] for e in entries]
     assert timestamps == sorted(timestamps, reverse=True)
+
+
+# ── get_analytics ─────────────────────────────────────────────────────────────
+
+def test_analytics_empty_db():
+    result = audit_log.get_analytics()
+    assert result["total_submissions"] == 0
+    assert result["appeal_rate"] == 0.0
+    assert result["signal_agreement_rate"] == 0.0
+
+
+def test_analytics_counts_attributions():
+    audit_log.write_entry(_entry(content_id="a1", attribution="likely_ai", llm_score=0.9, stylometric_score=0.8))
+    audit_log.write_entry(_entry(content_id="a2", attribution="likely_human", llm_score=0.2, stylometric_score=0.1))
+    audit_log.write_entry(_entry(content_id="a3", attribution="uncertain", llm_score=0.6, stylometric_score=0.3))
+    result = audit_log.get_analytics()
+    assert result["total_submissions"] == 3
+    assert result["attribution_distribution"]["likely_ai"] == 1
+    assert result["attribution_distribution"]["likely_human"] == 1
+    assert result["attribution_distribution"]["uncertain"] == 1
+
+
+def test_analytics_appeal_rate():
+    audit_log.write_entry(_entry(content_id="b1"))
+    audit_log.write_entry(_entry(content_id="b2"))
+    audit_log.update_appeal("b1", "reason")
+    result = audit_log.get_analytics()
+    assert result["appeal_rate"] == 0.5
+
+
+def test_analytics_signal_agreement():
+    # Both high → agree
+    audit_log.write_entry(_entry(content_id="c1", llm_score=0.8, stylometric_score=0.7))
+    # Both low → agree
+    audit_log.write_entry(_entry(content_id="c2", llm_score=0.2, stylometric_score=0.3))
+    # Disagree
+    audit_log.write_entry(_entry(content_id="c3", llm_score=0.8, stylometric_score=0.2))
+    result = audit_log.get_analytics()
+    assert result["signal_agreement_rate"] == pytest.approx(2 / 3, abs=0.001)

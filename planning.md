@@ -135,10 +135,109 @@ Every attribution decision and appeal written to structured log (SQLite or JSON)
 
 Attempted only after all required features pass. This document updated before each stretch feature begins.
 
-- **S1. Ensemble Detection** — third signal with documented weighting/voting.
-- **S2. Provenance Certificate** — "verified human" credential with display logic.
-- **S3. Analytics Dashboard** — GET /dashboard with detection patterns, appeal rate, and one additional metric.
-- **S4. Multi-Modal Support** — extend pipeline to a second content type.
+---
+
+#### S1. Ensemble Detection
+
+**Objective:** Incorporate 3 or more detection signals with a documented weighting approach.
+
+**Third signal — Repetition Density (RD):** Measures the ratio of repeated bigrams (word pairs) to total bigrams in a passage. AI text samples from high-probability token distributions, producing locally redundant sequences; human writing varies more. Pure Python, no dependencies. Returns 0.5 neutral for texts under 50 words (same guard as Signal 2).
+
+**Revised weight table:**
+
+| Signal | Weight | Rationale |
+|--------|--------|-----------|
+| LLM Semantic (Signal 1) | 0.50 | Holistic semantic judgment; most informative single signal |
+| Stylometric Heuristics (Signal 2) | 0.30 | Structural corroboration; validated against sample texts |
+| Repetition Density (Signal 3) | 0.20 | New and unvalidated; lower trust until calibrated |
+
+```
+confidence = 0.50 * llm_score + 0.30 * stylometric_score + 0.20 * repetition_score
+```
+
+**Schema change:** `ALTER TABLE audit_log ADD COLUMN repetition_score REAL` — backward compatible; existing rows get NULL.
+
+**Files:** `app/signals/repetition_signal.py` (new), `app/utils/confidence.py` (weights + 3-arg signature), `app/routes/submit.py` (third signal call), `app/models/audit_log.py` (migration).
+
+---
+
+#### S2. Provenance Certificate
+
+**Objective:** Design and implement a "verified human" credential that a creator can earn through an additional verification step, including how it is displayed on their content.
+
+**Verification flow:**
+1. `POST /verify` — creator submits `creator_id` + `attestation` (plain-text statement). Creates a `pending` record.
+2. `POST /verify/<creator_id>/approve` — moderator endpoint (unauthenticated, consistent with rest of API). Transitions status `pending → verified`, writes `verified_at` timestamp.
+
+**Storage:** New `creators` table:
+
+```sql
+CREATE TABLE IF NOT EXISTS creators (
+    creator_id          TEXT PRIMARY KEY,
+    attestation         TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'pending',
+    verified_at         TEXT,
+    verification_method TEXT NOT NULL DEFAULT 'self_attestation'
+)
+```
+
+**Display:** `creator_verified: true/false` injected into every `POST /submit` response and every `GET /log` entry. In the Gradio UI, a ✓ badge appears next to the creator ID in the Analyze panel when a verified creator submits.
+
+**Files:** `app/models/creators.py` (new), `app/routes/verify.py` (new), `app/main.py` (register blueprint).
+
+---
+
+#### S3. Analytics Dashboard
+
+**Objective:** Build a simple view showing detection patterns, appeal rates, and one additional metric.
+
+**Endpoint:** `GET /dashboard` — read-only, no new storage, all metrics derived from existing `audit_log` table.
+
+**Metrics:**
+
+| Metric | Definition | SQL |
+|--------|-----------|-----|
+| Detection patterns | Count of entries per attribution value | `GROUP BY attribution` |
+| Appeal rate | `appeals / total_submissions` as a float | `COUNT WHERE status = 'under_review' / COUNT(*)` |
+| Signal agreement rate | % of submissions where `llm_score` and `stylometric_score` are both > 0.5 or both < 0.5 | Computed in Python from aggregate query |
+
+**Response shape:**
+```json
+{
+  "total_submissions": 42,
+  "attribution_distribution": {"likely_ai": 18, "likely_human": 16, "uncertain": 8},
+  "appeal_rate": 0.095,
+  "signal_agreement_rate": 0.714
+}
+```
+
+**Files:** `app/routes/dashboard.py` (new), `app/models/audit_log.py` (add `get_analytics()`), `app/main.py` (register blueprint).
+
+---
+
+#### S4. Multi-Modal Support
+
+**Objective:** Extend the pipeline to handle a second content type in addition to text.
+
+**Second content type: `image_description`** — the `text` field carries an image caption, alt-text, or creator-written description of an image. The LLM receives a different prompt tuned for assessing whether a description reads as AI-written. The stylometric signal returns 0.5 neutral (descriptions are too short and structurally constrained for SLV/TTR/PD to be reliable).
+
+**API change:** `POST /submit` accepts optional `content_type` field, default `"text"`. Existing callers unaffected.
+
+```json
+{
+  "text": "A serene mountain lake at dusk, the water perfectly still...",
+  "creator_id": "photographer_kai",
+  "content_type": "image_description"
+}
+```
+
+**LLM prompt for `image_description`:** Instructs the model to assess whether the description reads as AI-generated (formulaic visual language, over-precise color names, templated scene structure) vs. human-written (personal voice, selective detail, emotional specificity).
+
+**Audit log:** `content_type` stored as a new column — `ALTER TABLE audit_log ADD COLUMN content_type TEXT NOT NULL DEFAULT 'text'`.
+
+**Files:** `app/signals/llm_signal.py` (second prompt constant + `content_type` param), `app/routes/submit.py` (accept + pass `content_type`), `app/models/audit_log.py` (migration).
+
+---
 
 ---
 
