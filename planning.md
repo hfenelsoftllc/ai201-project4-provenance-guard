@@ -372,6 +372,50 @@ When a creator submits `POST /appeal`, the system looks up the original log entr
 
 ---
 
+## Test Strategy
+
+### Philosophy
+
+The confidence thresholds, signal weights, and label texts are load-bearing design decisions — a one-constant change can silently shift behavior across the whole system. The test suite exists to catch those regressions immediately.
+
+### Test Structure
+
+```
+tests/
+├── test_confidence.py        # Threshold boundary tests
+├── test_labels.py            # Label dispatch and public contract strings
+├── test_stylometric_signal.py # Normalization, short-text guard
+├── test_llm_signal.py        # Injectable Groq client, score clamping
+├── test_audit_log.py         # DB read/write, appeal state machine
+├── test_routes.py            # Flask test client: all HTTP paths
+└── test_gradio_ui.py         # html.escape() on all user-controlled values
+```
+
+### No live API calls in tests
+
+`classify_with_llm(text, client=None)` accepts an injectable mock client. Tests pass a `MagicMock` instead of a real Groq client — no `GROQ_API_KEY` required to run the suite.
+
+### Regression anchors
+
+These specific cases must always pass:
+
+| Input | Expected output | Why it matters |
+|-------|----------------|----------------|
+| `compute_confidence(1.0, 0.125)` | confidence=0.65, attribution=`likely_ai` | AI threshold is exactly 0.65 |
+| `compute_confidence(1.0, 0.1)` | confidence=0.64, attribution=`uncertain` | One step below threshold → wide uncertain band |
+| `compute_confidence(0.0, 0.875)` | confidence=0.35, attribution=`likely_human` | Human threshold is exactly 0.35 |
+| `compute_confidence(0.0, 0.9)` | confidence=0.36, attribution=`uncertain` | One step above → uncertain band |
+| Short text (< 50 words) | stylometric score = 0.5 | Neutral fallback so LLM signal dominates |
+| `generate_label("unknown")` | `ValueError` | Contract enforced at dispatch |
+
+### Running tests
+
+```powershell
+pytest tests/ -v   # 70 tests, ~15 seconds, no network required
+```
+
+---
+
 ## AI Tool Plan
 
 ### Milestone 3 — Submission Endpoint + Signal 1 (Groq LLM)

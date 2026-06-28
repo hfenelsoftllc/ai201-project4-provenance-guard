@@ -19,22 +19,17 @@ _PROMPT = (
     "Text to analyze:\n"
 )
 
+# Module-level singleton — initialized once on first real call.
+# Tests inject a mock via the client= parameter instead of patching os.environ.
+_client: Groq | None = None
 
-def classify_with_llm(text: str) -> float:
-    """
-    Call the Groq LLM to assess whether text is AI-generated.
 
-    Args:
-        text: The content to classify.
-
-    Returns:
-        Float 0.0–1.0 where 1.0 = highly likely AI-generated.
-
-    Raises:
-        ValueError: If the API response cannot be parsed.
-        Exception: On API call failure.
-    """
-    client = Groq(api_key=os.environ["GROQ_API_KEY"])
+def classify_with_llm(text: str, client=None) -> float:
+    global _client
+    if client is None:
+        if _client is None:
+            _client = Groq(api_key=os.environ["GROQ_API_KEY"])
+        client = _client
     response = client.chat.completions.create(
         model=_MODEL,
         messages=[{"role": "user", "content": _PROMPT + text}],

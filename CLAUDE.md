@@ -5,9 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project State
 
-**This is a pre-implementation skeleton.** Every `.py` file under `app/` contains design comments, constants, and function stubs that `raise NotImplementedError`. The authoritative spec lives in `planning.md`; design decisions there are binding, not advisory.
-
-Work proceeds in milestones (Milestone 3 → 5). Each module's leading comment block names the milestone it belongs to — match changes to the right milestone rather than implementing across milestones in one pass.
+**Implementation is complete** (Milestones 3–5). All `app/` modules are fully implemented; `raise NotImplementedError` stubs have been replaced. The authoritative spec lives in `planning.md`; design decisions there are binding, not advisory.
 
 ## Commands
 
@@ -20,9 +18,29 @@ Copy-Item .env.example .env   # then edit .env to add GROQ_API_KEY
 
 # Run the dev server (Flask app factory in app/main.py)
 python -m app.main
+
+# Run the Gradio UI (port 7860)
+python gradio_ui.py
+
+# Run the test suite (no GROQ_API_KEY required — LLM calls are mocked)
+pytest tests/ -v
 ```
 
-No test suite, linter, or formatter is configured yet. If adding one, prefer `pytest` (the planning doc references Milestone 4 verification by directly calling signal functions with sample inputs — that pattern is what tests should formalize).
+## Test Suite
+
+70 tests across 6 files in `tests/`. No network calls — the Groq client is injectable via `classify_with_llm(text, client=mock)` so tests run offline.
+
+| File | Covers |
+|------|--------|
+| `tests/test_confidence.py` | Threshold boundaries (0.65 → likely_ai, 0.64 → uncertain), weights |
+| `tests/test_labels.py` | Label dispatch, public contract strings, appeal copy |
+| `tests/test_stylometric_signal.py` | Short-text guard (< 50 words), normalize boundaries, SLV/TTR |
+| `tests/test_llm_signal.py` | Mock client injection, score clamping, parse errors |
+| `tests/test_audit_log.py` | Write/read, appeal status transition, duplicate 409, limit/ordering |
+| `tests/test_routes.py` | Flask test client: all HTTP status codes, log write-through |
+| `tests/test_gradio_ui.py` | `html.escape()` on all user-controlled HTML values |
+
+When adding new features: patch at the import site (`app.routes.submit.classify_with_llm`), not the source module (`app.signals.llm_signal.classify_with_llm`).
 
 ## Architecture
 
