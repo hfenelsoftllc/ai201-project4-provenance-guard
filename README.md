@@ -238,6 +238,9 @@ The two signals can disagree substantially — a text can have human-sounding se
 **Rate limiting scope:**
 Limits are per IP address, not per `creator_id`. A scripted attacker using multiple IPs bypasses the 10/minute limit. Production deployment would key limits on authenticated `creator_id` instead.
 
+**Provenance certificate endpoint has no authentication (S2):**
+`POST /verify/<creator_id>/approve` is unauthenticated — any caller can approve any creator. This is a privilege escalation in a real deployment. Production use requires gating this endpoint on a moderator credential (e.g. `Authorization: Bearer <token>` validated against a moderator allowlist). `POST /verify` also accepts a freely-chosen `creator_id`; production would bind it to the authenticated principal instead.
+
 ---
 
 ## Spec Reflection

@@ -73,6 +73,9 @@ def approve(creator_id: str):
       404:
         description: creator_id not found
     """
+    # ponytail: no auth — production deployment must gate this on a moderator
+    # credential (e.g. Authorization: Bearer <moderator-token>). Without it,
+    # any caller can approve any creator_id. Omitted here per project scope.
     updated = creators_model.approve_verification(creator_id)
     if not updated:
         return jsonify({"error": "creator_id not found"}), 404
