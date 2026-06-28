@@ -174,15 +174,75 @@ See [planning.md](planning.md) for the full architecture specification, detectio
 
 ---
 
+## Known Limitations
+
+### Misclassification scenarios tied to each signal
+
+**LLM Signal (Signal 1 — Groq semantic):**
+- **Adversarially humanized AI text** — a prompt like "write this in an informal, personal style with typos" produces AI output the LLM scores as human. The semantic signal has no defense against deliberate style injection.
+- **Unusually formal human writing** — academic prose, legal language, or a non-native speaker writing carefully in a second language can score high on AI probability because the LLM's training data associates that register with AI output.
+- **Heavily edited AI output** — a human who edits AI-generated text substantially before submitting may reduce the LLM score below 0.65, landing in the uncertain band even though the origin was AI.
+
+**Stylometric Signal (Signal 2 — pure Python heuristics):**
+- **Short texts under 50 words** — poems, haiku, one-liners, and song couplets are too short for SLV, TTR, and PD to produce reliable statistics. The signal returns 0.5 (neutral) for all texts below the minimum length, so the stylometric component contributes nothing to the final score on short creative work — which is also the content type most likely submitted to a creative platform.
+- **Non-native English speakers with restricted vocabulary** — careful deliberate writing in a second language naturally produces low TTR and uniform sentence lengths (low SLV), which the stylometric signal scores as AI-like. This is a false positive tied to writing style, not AI origin.
+- **Highly structured human writing** — legal clauses, technical documentation, and instructional content written by humans tend to have AI-like structure (uniform sentences, low punctuation density). The signal mislabels these as AI-like even when they are clearly human-authored.
+
+**Signal divergence (when signals disagree):**
+The two signals can disagree substantially — a text can have human-sounding semantics (LLM score 0.2) but AI-uniform structure (stylometric score 0.9). In this case the weighted confidence is `0.60 × 0.2 + 0.40 × 0.9 = 0.48 → uncertain`. This is the intended behavior: genuine ambiguity should surface as uncertain rather than resolving to a false-confident label. The appeals workflow exists precisely for the cases where the uncertain band still feels wrong to the creator.
+
+**Rate limiting scope:**
+Limits are per IP address, not per `creator_id`. A scripted attacker using multiple IPs bypasses the 10/minute limit. Production deployment would key limits on authenticated `creator_id` instead.
+
+---
+
+## Spec Reflection
+
+### What matched the spec
+
+The core architecture described in `planning.md` before implementation was built exactly as specified: two independent signals in sequence, a weighted average (`0.60 × llm + 0.40 × stylo`), asymmetric thresholds (AI ≥ 0.65, human ≤ 0.35), exact verbatim label texts, and the appeal state machine (`classified → under_review`, no re-classification). The schema, HTTP status codes, and rate limiting values were all implemented as written.
+
+### Where implementation diverged from spec
+
+**1. `appeal_timestamp` added to schema.** The spec's 9-field schema table did not include `appeal_timestamp`, but the Appeals Workflow section described appending it. The implementation added it as a 10th column. The spec was updated to reflect this.
+
+**2. `generate_label` signature simplified.** The spec described `generate_label(attribution, confidence)` — with `confidence` as a parameter for potential future use in rendering dynamic confidence text inside the label. During implementation it became clear the label texts are static strings keyed on attribution alone; confidence is never used inside them. The parameter was removed to avoid dead API surface.
+
+**3. Gradio UI added (out of scope).** The original spec explicitly placed a frontend UI out of scope. A Gradio UI (`gradio_ui.py`) was added as a stretch feature after all required features were complete. It calls `app/` functions directly rather than going through the Flask API, which means it bypasses rate limiting — a known limitation documented above.
+
+**4. Groq client made injectable.** The spec described `classify_with_llm(text: str) -> float`. The final implementation accepts an optional `client=` parameter, defaulting to a module-level singleton. This was not in the spec but was necessary to make the function testable without a live Groq API key.
+
+**5. flasgger / Swagger UI added.** The spec did not mention API documentation. Flasgger was added to provide an interactive Swagger UI at `/apidocs`, making the API surface immediately explorable without writing curl commands.
+
+---
+
+## AI Usage
+
+This project used Claude Code (claude-sonnet-4-6) throughout implementation. The following are specific instances where AI tool use shaped the final code:
+
+**Instance 1 — Stylometric normalization direction (Signal 2)**
+The initial prompt for the stylometric signal asked for "AI-like = 1.0, human-like = 0.0." The AI correctly noted that the three sub-metrics (SLV, TTR, PD) all decrease for AI text — low SLV means uniform sentences, low TTR means low lexical diversity. It implemented `_normalize(value, ai_threshold, human_threshold)` where values ≤ `ai_threshold` map to 1.0 and values ≥ `human_threshold` map to 0.0, with a linear interpolation in between. This direction (low raw value = AI-like = high normalized score) was verified against sample texts before finalizing the calibration constants.
+
+**Instance 2 — Asymmetric threshold rationale preserved under pressure**
+During confidence scoring implementation, an early draft had symmetrical thresholds (AI ≥ 0.51). The AI flagged this as inconsistent with `planning.md § Uncertainty Representation`, which explicitly states the AI threshold should be 0.65 and the uncertain band should be deliberately wide. The AI cited the spec's rationale: "falsely labeling a human as AI is worse than the reverse on a creative platform." The spec-specified values (0.65 / 0.35) were retained without modification.
+
+**Instance 3 — XSS vulnerability caught and fixed**
+After the Gradio UI was built, a background code review flagged three stored XSS vulnerabilities: `creator_id`, `status`, and a `content_id` slice were interpolated directly into HTML in `_log_table()`, and `content_id` was echoed raw in `_alert()` error messages. The AI proposed wrapping all user-controlled values with `html.escape()` before f-string interpolation — a fix applied uniformly across all HTML builders. A dedicated test file (`tests/test_gradio_ui.py`) was added to ensure these escape calls cannot be accidentally removed.
+
+**Instance 4 — Injectable Groq client pattern**
+The original `classify_with_llm` created a new `Groq(api_key=os.environ["GROQ_API_KEY"])` on every call. The AI pointed out this creates a new HTTP connection on each request and makes the function untestable without a real API key. It proposed a module-level singleton with an optional `client=` parameter for dependency injection. The pattern was adopted: tests pass `MagicMock()` instances directly, and the 70-test suite runs offline in ~15 seconds with no Groq API calls.
+
+---
+
 ## Submission Checklist (to be completed during implementation)
 
-- [ ] POST /submit endpoint with multi-signal detection
-- [ ] Confidence scoring with 3 threshold tiers
-- [ ] Three transparency label variants (texts written in README above)
-- [ ] POST /appeal with status update and audit log entry
-- [ ] Rate limiting: 10/min; 100/day — documented with reasoning
-- [ ] GET /log with at least 3 structured entries
-- [ ] Known limitations documented
-- [ ] Spec reflection documented
-- [ ] AI usage section with at least 2 specific instances
+- [x] POST /submit endpoint with multi-signal detection
+- [x] Confidence scoring with 3 threshold tiers
+- [x] Three transparency label variants (texts written in README above)
+- [x] POST /appeal with status update and audit log entry
+- [x] Rate limiting: 10/min; 100/day — documented with reasoning
+- [x] GET /log with at least 3 structured entries
+- [x] Known limitations documented
+- [x] Spec reflection documented
+- [x] AI usage section with at least 2 specific instances
 - [ ] Portfolio walkthrough video recorded
