@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sketch 002 — Attribution Result Display | Provenance Guard UI</title>
+<link rel="stylesheet" href="../themes/default.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--color-bg); color: var(--color-text); font-family: var(--font-sans); font-size: var(--text-base); min-height: 100vh; }
+
+  /* ── Variant nav ── */
+  #variant-nav { position:fixed;top:0;left:0;right:0;z-index:9998;background:#0a0c14;border-bottom:1px solid var(--color-border);padding:8px 16px;display:flex;gap:6px;align-items:center;font-family:var(--font-sans);font-size:12px; }
+  #variant-nav span { color:var(--color-text-dim);margin-right:4px;font-size:11px;text-transform:uppercase;letter-spacing:.05em; }
+  .variant-tab { background:transparent;border:1px solid var(--color-border);color:var(--color-text-muted);padding:4px 14px;border-radius:var(--radius-full);cursor:pointer;font-size:12px;transition:all var(--transition-fast);font-family:inherit; }
+  .variant-tab:hover { border-color:var(--color-primary);color:var(--color-text); }
+  .variant-tab.active { background:var(--color-primary);border-color:var(--color-primary);color:#fff; }
+  .variant { display:none;padding-top:44px; }
+  .variant.active { display:block; }
+
+  /* ── Shared ── */
+  .page-wrap { max-width:580px;margin:0 auto;padding:var(--space-8) var(--space-6); }
+  .section-label { font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--color-text-dim);font-weight:700;margin-bottom:var(--space-4); }
+
+  /* State picker */
+  .state-picker { display:flex;gap:8px;margin-bottom:var(--space-8);flex-wrap:wrap; }
+  .state-btn { padding:6px 14px;border-radius:var(--radius-full);border:1px solid var(--color-border);background:transparent;color:var(--color-text-muted);cursor:pointer;font-size:var(--text-xs);font-weight:600;font-family:inherit;transition:all var(--transition-fast); }
+  .state-btn:hover { color:var(--color-text);border-color:var(--color-primary); }
+  .state-btn.active-ai { background:rgba(244,63,94,.15);border-color:rgba(244,63,94,.4);color:var(--color-ai); }
+  .state-btn.active-human { background:rgba(16,185,129,.15);border-color:rgba(16,185,129,.4);color:var(--color-human); }
+  .state-btn.active-uncertain { background:rgba(245,158,11,.15);border-color:rgba(245,158,11,.4);color:var(--color-uncertain); }
+
+  /* Fake input stub */
+  .input-stub { background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-5);margin-bottom:var(--space-5); }
+  .input-stub textarea { width:100%;background:transparent;border:none;color:var(--color-text-muted);font-family:inherit;font-size:var(--text-sm);resize:none;outline:none;line-height:1.5; }
+  .input-stub-footer { display:flex;justify-content:space-between;align-items:center;margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--color-border); }
+
+  .btn { display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:var(--radius-md);border:none;cursor:pointer;font-family:inherit;font-size:var(--text-sm);font-weight:500;transition:all var(--transition-fast); }
+  .btn-primary { background:var(--color-primary);color:#fff; }
+  .btn-primary:hover { background:var(--color-primary-hover);box-shadow:var(--shadow-glow-primary); }
+  .btn-ghost { background:transparent;color:var(--color-text-muted);border:1px solid var(--color-border); }
+  .btn-ghost:hover { border-color:var(--color-primary);color:var(--color-text); }
+  .btn-sm { padding:5px 12px;font-size:var(--text-xs); }
+
+  @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes countUp { from{opacity:0} to{opacity:1} }
+  @keyframes fillBar { from{width:0} to{width:var(--target-w)} }
+  @keyframes spinIn { from{transform:rotate(-90deg);opacity:0} to{transform:rotate(0deg);opacity:1} }
+
+  /* ══════════════════════════════════════
+     VARIANT A — Score Gauge
+  ══════════════════════════════════════ */
+  .gauge-card { background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-xl);padding:var(--space-8);animation:fadeUp .3s ease; }
+  .gauge-wrap { display:flex;flex-direction:column;align-items:center;margin-bottom:var(--space-6); }
+  .gauge-svg { position:relative;width:180px;height:100px; }
+
+  .gauge-verdicts { display:flex;justify-content:center;flex-direction:column;align-items:center;gap:var(--space-3);margin-bottom:var(--space-6); }
+  .gauge-verdict-label { font-size:var(--text-xl);font-weight:700;letter-spacing:-.01em; }
+  .gauge-verdict-sub { font-size:var(--text-sm);color:var(--color-text-muted);text-align:center;line-height:1.6;max-width:380px; }
+
+  .gauge-signals { display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4); }
+  .signal-card { background:var(--color-surface-raised);border-radius:var(--radius-md);padding:var(--space-4); }
+  .signal-name { font-size:var(--text-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-dim);margin-bottom:var(--space-2); }
+  .signal-score { font-family:var(--font-mono);font-size:var(--text-2xl);font-weight:700;margin-bottom:var(--space-2); }
+  .signal-bar { height:4px;background:var(--color-border);border-radius:2px;overflow:hidden; }
+  .signal-fill { height:100%;border-radius:2px;transition:width .6s ease; }
+
+  .label-box { background:var(--color-surface-raised);border-radius:var(--radius-md);padding:var(--space-4) var(--space-5);font-size:var(--text-sm);line-height:1.65;color:var(--color-text-muted);margin-top:var(--space-5);position:relative; }
+  .label-box::before { content:'Label';position:absolute;top:-8px;left:12px;background:var(--color-surface-raised);padding:0 6px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-dim); }
+
+  .appeal-row { margin-top:var(--space-5);display:flex;justify-content:flex-end; }
+
+  /* ══════════════════════════════════════
+     VARIANT B — Verdict Card
+  ══════════════════════════════════════ */
+  .verdict-card { border-radius:var(--radius-xl);overflow:hidden;animation:fadeUp .3s ease;box-shadow:var(--shadow-md); }
+  .verdict-header { padding:var(--space-6) var(--space-6) var(--space-5); }
+  .verdict-header-row { display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4); }
+  .verdict-icon-ring { width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px; }
+  .verdict-title { font-size:var(--text-xl);font-weight:700;margin-bottom:2px; }
+  .verdict-sub { font-size:var(--text-sm);opacity:.7; }
+  .verdict-pct { font-family:var(--font-mono);font-size:var(--text-3xl);font-weight:700;opacity:.9; }
+
+  .verdict-progress { height:8px;background:rgba(255,255,255,.15);border-radius:4px;overflow:hidden; }
+  .verdict-progress-fill { height:100%;border-radius:4px;background:rgba(255,255,255,.7);transition:width .7s ease; }
+
+  .verdict-body { background:var(--color-surface);padding:var(--space-5) var(--space-6); }
+  .verdict-signals { display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-5); }
+  .vsig { padding:var(--space-3) var(--space-4);background:var(--color-surface-raised);border-radius:var(--radius-md); }
+  .vsig-label { font-size:var(--text-xs);color:var(--color-text-dim);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em; }
+  .vsig-val { font-family:var(--font-mono);font-size:var(--text-lg);font-weight:700; }
+  .vsig-bar-wrap { height:3px;background:var(--color-border);border-radius:2px;overflow:hidden;margin-top:6px; }
+  .vsig-bar { height:100%;border-radius:2px;transition:width .6s .2s ease; }
+
+  .verdict-label-text { font-size:var(--text-sm);line-height:1.65;color:var(--color-text-muted);padding:var(--space-4);background:var(--color-surface-raised);border-radius:var(--radius-md);margin-bottom:var(--space-4); }
+  .verdict-footer { display:flex;justify-content:flex-end;gap:var(--space-3); }
+
+  /* ══════════════════════════════════════
+     VARIANT C — Minimal Banner
+  ══════════════════════════════════════ */
+  .banner-result { border-radius:var(--radius-lg);overflow:hidden;animation:fadeUp .3s ease; }
+  .banner-strip { padding:var(--space-4) var(--space-5);display:flex;align-items:center;justify-content:space-between; }
+  .banner-strip-left { display:flex;align-items:center;gap:var(--space-3); }
+  .banner-dot { width:10px;height:10px;border-radius:50%; }
+  .banner-verdict { font-weight:700;font-size:var(--text-lg); }
+  .banner-conf { font-family:var(--font-mono);font-size:var(--text-sm);opacity:.8; }
+
+  .banner-body { background:var(--color-surface);border:1px solid var(--color-border);border-top:none; }
+  .banner-progress-row { padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--color-border); }
+  .banner-progress-label { display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-2);font-size:var(--text-xs);color:var(--color-text-dim); }
+  .banner-bar { height:6px;background:var(--color-border);border-radius:3px;overflow:hidden; }
+  .banner-fill { height:100%;border-radius:3px;transition:width .7s ease; }
+
+  .banner-detail-row { padding:var(--space-4) var(--space-5);display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);border-bottom:1px solid var(--color-border); }
+  .banner-detail-item { font-size:var(--text-xs); }
+  .banner-detail-key { color:var(--color-text-dim);margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em;font-weight:600; }
+  .banner-detail-val { font-family:var(--font-mono);font-size:var(--text-sm);font-weight:600; }
+
+  .banner-label-toggle { padding:var(--space-3) var(--space-5);cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:var(--text-xs);color:var(--color-text-dim);border-bottom:1px solid var(--color-border);user-select:none; }
+  .banner-label-toggle:hover { background:var(--color-surface-raised); }
+  .banner-label-text { padding:var(--space-4) var(--space-5);font-size:var(--text-sm);line-height:1.65;color:var(--color-text-muted); }
+  .banner-actions { padding:var(--space-3) var(--space-5);display:flex;justify-content:flex-end;gap:var(--space-3); }
+</style>
+</head>
+<body>
+
+<!-- ── Variant switcher ── -->
+<div id="variant-nav">
+  <span>Sketch 002</span>
+  <button class="variant-tab active" onclick="showVariant('a', this)">A: Score Gauge</button>
+  <button class="variant-tab" onclick="showVariant('b', this)">B: Verdict Card ★</button>
+  <button class="variant-tab" onclick="showVariant('c', this)">C: Minimal Banner</button>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     VARIANT A — Score Gauge
+════════════════════════════════════════════════════ -->
+<div id="variant-a" class="variant active">
+  <div class="page-wrap">
+    <div class="section-label">Cycle Result States</div>
+    <div class="state-picker">
+      <button class="state-btn active-ai" onclick="renderA('likely_ai', 0.82, 0.90, 0.70, this)">🤖 AI Detected (0.82)</button>
+      <button class="state-btn" onclick="renderA('likely_human', 0.18, 0.12, 0.28, this)">✍️ Human (0.18)</button>
+      <button class="state-btn" onclick="renderA('uncertain', 0.53, 0.60, 0.42, this)">❓ Uncertain (0.53)</button>
+    </div>
+    <div id="gauge-result"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     VARIANT B — Verdict Card (color-coded header)
+════════════════════════════════════════════════════ -->
+<div id="variant-b" class="variant">
+  <div class="page-wrap">
+    <div class="section-label">Cycle Result States</div>
+    <div class="state-picker">
+      <button class="state-btn active-ai" onclick="renderB('likely_ai', 0.82, 0.90, 0.70, this)">🤖 AI Detected (0.82)</button>
+      <button class="state-btn" onclick="renderB('likely_human', 0.18, 0.12, 0.28, this)">✍️ Human (0.18)</button>
+      <button class="state-btn" onclick="renderB('uncertain', 0.53, 0.60, 0.42, this)">❓ Uncertain (0.53)</button>
+    </div>
+    <div id="verdict-result"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     VARIANT C — Minimal Banner + Expandable
+════════════════════════════════════════════════════ -->
+<div id="variant-c" class="variant">
+  <div class="page-wrap">
+    <div class="section-label">Cycle Result States</div>
+    <div class="state-picker">
+      <button class="state-btn active-ai" onclick="renderC('likely_ai', 0.82, 0.90, 0.70, this)">🤖 AI Detected (0.82)</button>
+      <button class="state-btn" onclick="renderC('likely_human', 0.18, 0.12, 0.28, this)">✍️ Human (0.18)</button>
+      <button class="state-btn" onclick="renderC('uncertain', 0.53, 0.60, 0.42, this)">❓ Uncertain (0.53)</button>
+    </div>
+    <div id="banner-result"></div>
+  </div>
+</div>
+
+<!-- ── Sketch toolbar ── -->
+<div id="sketch-tools" style="position:fixed;bottom:12px;right:12px;z-index:9999;font-family:system-ui;font-size:11px;background:rgba(0,0,0,0.8);color:white;padding:8px 12px;border-radius:8px;opacity:0.35;transition:opacity 0.2s;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.35'">
+  <div style="margin-bottom:5px;font-weight:600;color:#a78bfa">Sketch 002</div>
+  <div style="margin-bottom:4px">
+    <select onchange="document.querySelector('link[href*=themes]').href='../themes/'+this.value+'.css'" style="background:#222;color:#fff;border:none;font-size:11px;border-radius:3px;padding:1px 4px">
+      <option value="default">Theme: Dark</option>
+    </select>
+  </div>
+  <div style="display:flex;gap:4px">
+    <button onclick="setWidth(375)" style="background:#333;border:none;color:#ccc;padding:2px 7px;border-radius:3px;cursor:pointer;font-size:10px">📱</button>
+    <button onclick="setWidth(580)" style="background:#333;border:none;color:#ccc;padding:2px 7px;border-radius:3px;cursor:pointer;font-size:10px">📟</button>
+    <button onclick="setWidth(0)" style="background:#333;border:none;color:#ccc;padding:2px 7px;border-radius:3px;cursor:pointer;font-size:10px">🖥</button>
+  </div>
+</div>
+
+<script>
+// ── Data ──
+const DATA = {
+  likely_ai: {
+    color: '#f43f5e', icon: '🤖',
+    title: 'AI-Assisted Content',
+    sub: 'Patterns consistent with AI-generated text detected',
+    label: 'AI-Assisted Content\nOur systems detected patterns consistent with AI-generated text (confidence: HIGH).\nThis label does not prevent you from reading or engaging with this work.\nIf you are the creator and believe this is incorrect, you can submit an appeal.',
+    showAppeal: true
+  },
+  likely_human: {
+    color: '#10b981', icon: '✍️',
+    title: 'Human-Authored Content',
+    sub: 'Strong indicators of human authorship found',
+    label: 'Human-Authored Content\nOur systems found strong indicators that this work was written by a person (confidence: HIGH).\nEnjoy the work knowing it reflects a human creative voice.',
+    showAppeal: false
+  },
+  uncertain: {
+    color: '#f59e0b', icon: '❓',
+    title: 'Attribution Unclear',
+    sub: 'Signals did not converge — human review recommended',
+    label: 'Attribution Unclear\nOur systems were unable to determine with confidence whether this content was written by a person or generated by AI (confidence: LOW).\nWe encourage you to consider the context. If you are the creator and believe this classification is wrong, you can submit an appeal.',
+    showAppeal: true
+  }
+};
+
+// ── Variant switching ──
+function showVariant(id, btn) {
+  document.querySelectorAll('.variant').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.variant-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('variant-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+
+function setWidth(w) {
+  document.querySelectorAll('.page-wrap').forEach(el => { el.style.maxWidth = w ? w+'px' : '580px'; });
+}
+
+function pickerClass(attr) {
+  return { likely_ai:'active-ai', likely_human:'active-human', uncertain:'active-uncertain' }[attr];
+}
+
+function updatePicker(btns, active, attr) {
+  btns.forEach(b => b.className = 'state-btn');
+  active.classList.add(pickerClass(attr));
+}
+
+// ── VARIANT A — Gauge ──
+function renderA(attr, conf, llm, stylo, clickedBtn) {
+  const d = DATA[attr];
+  const pct = Math.round(conf * 100);
+  const llmPct = Math.round(llm * 100);
+  const styloPct = Math.round(stylo * 100);
+  if (clickedBtn) updatePicker(document.querySelectorAll('#variant-a .state-btn'), clickedBtn, attr);
+
+  // SVG gauge (half-donut)
+  const r = 70, cx = 90, cy = 90;
+  const circ = Math.PI * r;
+  const offset = circ - (conf * circ);
+  const labelLines = d.label.split('\n').map(l => `<div>${l}</div>`).join('');
+
+  document.getElementById('gauge-result').innerHTML = `
+  <div class="gauge-card">
+    <div class="gauge-wrap">
+      <svg viewBox="0 0 180 100" width="200" height="115" style="overflow:visible">
+        <path d="M 20 90 A 70 70 0 0 1 160 90" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="14" stroke-linecap="round"/>
+        <path d="M 20 90 A 70 70 0 0 1 160 90" fill="none" stroke="${d.color}" stroke-width="14" stroke-linecap="round"
+          stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+          style="transition:stroke-dashoffset .7s ease;transform-origin:90px 90px"/>
+        <text x="90" y="82" text-anchor="middle" fill="${d.color}" font-size="28" font-weight="700" font-family="JetBrains Mono,monospace">${pct}%</text>
+        <text x="90" y="98" text-anchor="middle" fill="rgba(255,255,255,.3)" font-size="10" font-family="Inter,system-ui">CONFIDENCE</text>
+      </svg>
+    </div>
+    <div class="gauge-verdicts">
+      <div class="gauge-verdict-label" style="color:${d.color}">${d.icon} ${d.title}</div>
+      <div class="gauge-verdict-sub">${d.sub}</div>
+    </div>
+    <div class="gauge-signals">
+      <div class="signal-card">
+        <div class="signal-name">LLM Signal</div>
+        <div class="signal-score" style="color:${d.color}">${llm.toFixed(2)}</div>
+        <div class="signal-bar"><div class="signal-fill" style="width:${llmPct}%;background:${d.color}"></div></div>
+      </div>
+      <div class="signal-card">
+        <div class="signal-name">Stylometric</div>
+        <div class="signal-score" style="color:${d.color}">${stylo.toFixed(2)}</div>
+        <div class="signal-bar"><div class="signal-fill" style="width:${styloPct}%;background:${d.color}"></div></div>
+      </div>
+    </div>
+    <div class="label-box" style="border-left:3px solid ${d.color}22">${labelLines}</div>
+    ${d.showAppeal ? `<div class="appeal-row"><button class="btn btn-ghost btn-sm">📝 File an Appeal</button></div>` : ''}
+  </div>`;
+}
+
+// ── VARIANT B — Verdict Card ──
+function renderB(attr, conf, llm, stylo, clickedBtn) {
+  const d = DATA[attr];
+  const pct = Math.round(conf * 100);
+  const llmPct = Math.round(llm * 100);
+  const styloPct = Math.round(stylo * 100);
+  if (clickedBtn) updatePicker(document.querySelectorAll('#variant-b .state-btn'), clickedBtn, attr);
+  const labelLines = d.label.split('\n').join('<br>');
+
+  document.getElementById('verdict-result').innerHTML = `
+  <div class="verdict-card">
+    <div class="verdict-header" style="background:linear-gradient(135deg,${d.color}22 0%,${d.color}08 100%);border:1px solid ${d.color}30;border-bottom:none">
+      <div class="verdict-header-row">
+        <div>
+          <div class="verdict-title" style="color:${d.color}">${d.icon} ${d.title}</div>
+          <div class="verdict-sub" style="color:${d.color}">${d.sub}</div>
+        </div>
+        <div class="verdict-pct" style="color:${d.color}">${pct}%</div>
+      </div>
+      <div class="verdict-progress">
+        <div class="verdict-progress-fill" style="width:${pct}%;background:${d.color}"></div>
+      </div>
+    </div>
+    <div class="verdict-body" style="border:1px solid ${d.color}30">
+      <div class="verdict-signals">
+        <div class="vsig">
+          <div class="vsig-label">LLM Signal</div>
+          <div class="vsig-val" style="color:${d.color}">${llm.toFixed(2)}</div>
+          <div class="vsig-bar-wrap"><div class="vsig-bar" style="width:${llmPct}%;background:${d.color}"></div></div>
+        </div>
+        <div class="vsig">
+          <div class="vsig-label">Stylometric</div>
+          <div class="vsig-val" style="color:${d.color}">${stylo.toFixed(2)}</div>
+          <div class="vsig-bar-wrap"><div class="vsig-bar" style="width:${styloPct}%;background:${d.color}"></div></div>
+        </div>
+      </div>
+      <div class="verdict-label-text">${labelLines}</div>
+      <div class="verdict-footer">
+        ${d.showAppeal ? `<button class="btn btn-ghost btn-sm">📝 File Appeal</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="copyId()">📋 Copy ID</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── VARIANT C — Banner ──
+function renderC(attr, conf, llm, stylo, clickedBtn) {
+  const d = DATA[attr];
+  const pct = Math.round(conf * 100);
+  const llmPct = Math.round(llm * 100);
+  const styloPct = Math.round(stylo * 100);
+  if (clickedBtn) updatePicker(document.querySelectorAll('#variant-c .state-btn'), clickedBtn, attr);
+  const labelLines = d.label.split('\n').join('<br>');
+  const labelId = 'clbl_' + Date.now();
+
+  document.getElementById('banner-result').innerHTML = `
+  <div class="banner-result">
+    <div class="banner-strip" style="background:${d.color}18;border:1px solid ${d.color}30;border-radius:var(--radius-lg) var(--radius-lg) 0 0">
+      <div class="banner-strip-left">
+        <div class="banner-dot" style="background:${d.color};box-shadow:0 0 8px ${d.color}80"></div>
+        <span class="banner-verdict" style="color:${d.color}">${d.title}</span>
+      </div>
+      <span class="banner-conf" style="color:${d.color}">Confidence: ${pct}%</span>
+    </div>
+    <div class="banner-body">
+      <div class="banner-progress-row">
+        <div class="banner-progress-label">
+          <span>Combined Score</span>
+          <span style="font-family:var(--font-mono);color:${d.color}">${conf.toFixed(4)}</span>
+        </div>
+        <div class="banner-bar"><div class="banner-fill" style="width:${pct}%;background:${d.color}"></div></div>
+      </div>
+      <div class="banner-detail-row">
+        <div class="banner-detail-item">
+          <div class="banner-detail-key">LLM Signal</div>
+          <div class="banner-detail-val" style="color:var(--color-text)">${llm.toFixed(2)}</div>
+          <div style="height:2px;background:var(--color-border);border-radius:1px;margin-top:4px;overflow:hidden">
+            <div style="height:100%;width:${llmPct}%;background:${d.color};transition:width .5s ease"></div>
+          </div>
+        </div>
+        <div class="banner-detail-item">
+          <div class="banner-detail-key">Stylometric</div>
+          <div class="banner-detail-val" style="color:var(--color-text)">${stylo.toFixed(2)}</div>
+          <div style="height:2px;background:var(--color-border);border-radius:1px;margin-top:4px;overflow:hidden">
+            <div style="height:100%;width:${styloPct}%;background:${d.color};transition:width .5s .1s ease"></div>
+          </div>
+        </div>
+      </div>
+      <div class="banner-label-toggle" onclick="toggleLabel('${labelId}')">
+        <span>📄 Transparency Label</span><span id="${labelId}-arrow">▼</span>
+      </div>
+      <div id="${labelId}" style="display:none">
+        <div class="banner-label-text">${labelLines}</div>
+      </div>
+      <div class="banner-actions">
+        ${d.showAppeal ? `<button class="btn btn-ghost btn-sm">📝 Appeal</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="copyId()">📋 Copy ID</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleLabel(id) {
+  const el = document.getElementById(id);
+  const arrow = document.getElementById(id + '-arrow');
+  const open = el.style.display === 'block';
+  el.style.display = open ? 'none' : 'block';
+  arrow.textContent = open ? '▼' : '▲';
+}
+
+function copyId() {
+  navigator.clipboard?.writeText('3f7a8c2d-1234-5678-abcd-ef0123456789').catch(()=>{});
+}
+
+// ── Init with AI state ──
+renderA('likely_ai', 0.82, 0.90, 0.70);
+renderB('likely_ai', 0.82, 0.90, 0.70);
+renderC('likely_ai', 0.82, 0.90, 0.70);
+</script>
+</body>
+</html>

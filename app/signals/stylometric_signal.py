@@ -1,98 +1,94 @@
 # app/signals/stylometric_signal.py
 # Signal 2: Stylometric heuristics (pure Python, no external libraries).
-# No implementation — skeleton only.
 #
-# TODO (Milestone 4): Implement stylometric classification signal.
+# Three sub-metrics averaged: Sentence Length Variance (SLV), Type-Token
+# Ratio (TTR), Punctuation Density (PD). Each normalized 0.0–1.0 where
+# 1.0 = AI-like.
 #
-# Design spec (from planning.md):
-#   Three sub-metrics averaged into a single stylometric score:
-#
-#   1. Sentence Length Variance (SLV)
-#      - Std dev of sentence lengths in words.
-#      - AI text: more uniform (low SLV) -> normalized toward 1.0 (AI-like)
-#      - Human writing: more variable (high SLV) -> normalized toward 0.0
-#
-#   2. Type-Token Ratio (TTR)
-#      - unique_words / total_words (computed on first 100 tokens)
-#      - AI text: lower lexical diversity -> normalized toward 1.0 (AI-like)
-#      - Human creative writing: higher TTR -> normalized toward 0.0
-#
-#   3. Punctuation Density (PD)
-#      - Non-period punctuation per 100 words
-#      - AI text: comma-heavy, uniform -> extreme uniformity toward 1.0
-#      - Human text: idiosyncratic punctuation -> toward 0.0
-#
-#   Output: float 0.0–1.0 where 1.0 = strongly AI-like structurally.
-#
-# Edge case: if text < 50 words, return 0.5 (neutral) — too short for
-# reliable statistics. Note this in audit log.
-#
-# Blind spots:
-#   - Non-native English speakers with formal/restricted vocabulary
-#   - Short texts (< 50 words)
-#   - Highly structured human writing (legal, academic)
+# Blind spots: non-native English speakers with formal/restricted vocabulary,
+# short texts (< 50 words), highly structured human writing (legal, academic).
 
+import math
+import re
+import string
 
 MIN_WORDS_FOR_STYLOMETRICS = 50
 
-# Normalization reference ranges (calibrate during Milestone 4 testing)
-# SLV: low (AI-like) ~0-6, high (human-like) ~15+
-SLV_AI_THRESHOLD = 6.0
-SLV_HUMAN_THRESHOLD = 15.0
+# Normalization reference ranges (recalibrate in Milestone 4 against sample texts)
+SLV_AI_THRESHOLD = 6.0       # std dev ≤ 6 → AI-like (uniform sentences)
+SLV_HUMAN_THRESHOLD = 15.0   # std dev ≥ 15 → human-like (variable sentences)
 
-# TTR: low (AI-like) ~0.4, high (human-like) ~0.7+
-TTR_AI_THRESHOLD = 0.4
-TTR_HUMAN_THRESHOLD = 0.7
+TTR_AI_THRESHOLD = 0.4       # ratio ≤ 0.4 → AI-like (low lexical diversity)
+TTR_HUMAN_THRESHOLD = 0.7    # ratio ≥ 0.7 → human-like (high lexical diversity)
 
-# PD: reference ranges TBD during calibration
-PD_AI_THRESHOLD = 3.0
-PD_HUMAN_THRESHOLD = 8.0
+PD_AI_THRESHOLD = 3.0        # ≤ 3 non-period punct/100 words → AI-like (sparse)
+PD_HUMAN_THRESHOLD = 8.0     # ≥ 8 non-period punct/100 words → human-like (expressive)
 
 
 def classify_with_stylometrics(text: str) -> float:
     """
     Compute stylometric score for the given text.
 
-    Args:
-        text: The content to classify.
-
-    Returns:
-        Float 0.0–1.0 where 1.0 = strongly AI-like structurally.
-        Returns 0.5 if text is shorter than MIN_WORDS_FOR_STYLOMETRICS.
+    Returns 0.5 (neutral) if text is shorter than MIN_WORDS_FOR_STYLOMETRICS
+    so the LLM signal dominates for short content.
     """
-    # TODO: implement
-    # 1. Tokenize text into words and sentences
-    # 2. If len(words) < MIN_WORDS_FOR_STYLOMETRICS, return 0.5
-    # 3. Compute SLV sub-metric and normalize to 0.0-1.0
-    # 4. Compute TTR sub-metric and normalize to 0.0-1.0
-    # 5. Compute PD sub-metric and normalize to 0.0-1.0
-    # 6. Return average of three normalized sub-metrics
-    raise NotImplementedError("Stylometric signal not yet implemented")
+    words = text.split()
+    if len(words) < MIN_WORDS_FOR_STYLOMETRICS:
+        return 0.5
+
+    sentences = _split_sentences(text)
+    slv_raw = _compute_slv(sentences)
+    ttr_raw = _compute_ttr(words)
+    pd_raw = _compute_pd(text, len(words))
+
+    slv_score = _normalize(slv_raw, SLV_AI_THRESHOLD, SLV_HUMAN_THRESHOLD)
+    ttr_score = _normalize(ttr_raw, TTR_AI_THRESHOLD, TTR_HUMAN_THRESHOLD)
+    pd_score = _normalize(pd_raw, PD_AI_THRESHOLD, PD_HUMAN_THRESHOLD)
+
+    return round((slv_score + ttr_score + pd_score) / 3, 4)
+
+
+def _split_sentences(text: str) -> list:
+    """Split text into sentences on .!? boundaries."""
+    parts = re.split(r"[.!?]+", text)
+    return [p.strip() for p in parts if p.strip()]
 
 
 def _compute_slv(sentences: list) -> float:
-    """Compute sentence length variance sub-metric. Returns raw std dev."""
-    # TODO: implement
-    raise NotImplementedError
+    """Std dev of sentence lengths in words. Low = uniform = AI-like."""
+    if len(sentences) < 2:
+        return 0.0
+    lengths = [len(s.split()) for s in sentences]
+    mean = sum(lengths) / len(lengths)
+    variance = sum((l - mean) ** 2 for l in lengths) / len(lengths)
+    return math.sqrt(variance)
 
 
 def _compute_ttr(words: list) -> float:
-    """Compute type-token ratio on first 100 tokens."""
-    # TODO: implement
-    raise NotImplementedError
+    """Type-token ratio on first 100 tokens. Low = low diversity = AI-like."""
+    sample = [w.lower().strip(string.punctuation) for w in words[:100]]
+    sample = [w for w in sample if w]
+    if not sample:
+        return 0.5
+    return len(set(sample)) / len(sample)
 
 
 def _compute_pd(text: str, word_count: int) -> float:
-    """Compute punctuation density per 100 words."""
-    # TODO: implement
-    raise NotImplementedError
+    """Non-period punctuation per 100 words. Low density = AI-like."""
+    if word_count == 0:
+        return 0.0
+    non_period = sum(1 for ch in text if ch in ",;:!?—–-\"'()")
+    return (non_period / word_count) * 100
 
 
 def _normalize(value: float, ai_threshold: float, human_threshold: float) -> float:
     """
-    Normalize a raw metric value to 0.0-1.0 range.
-    ai_threshold: value at or below which score = 1.0 (most AI-like)
-    human_threshold: value at or above which score = 0.0 (most human-like)
+    Normalize a raw metric to 0.0–1.0.
+    value ≤ ai_threshold    → 1.0 (most AI-like)
+    value ≥ human_threshold → 0.0 (most human-like)
     """
-    # TODO: implement
-    raise NotImplementedError
+    if value <= ai_threshold:
+        return 1.0
+    if value >= human_threshold:
+        return 0.0
+    return 1.0 - (value - ai_threshold) / (human_threshold - ai_threshold)

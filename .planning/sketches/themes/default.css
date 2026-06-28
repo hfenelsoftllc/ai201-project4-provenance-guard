@@ -1,0 +1,78 @@
+/* Provenance Guard — Sketch Theme: Sleek Dark */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Backgrounds */
+  --color-bg: #0d0f1a;
+  --color-surface: #151826;
+  --color-surface-raised: #1e2235;
+  --color-surface-hover: #252840;
+
+  /* Borders */
+  --color-border: #272b42;
+  --color-border-focus: #5865f2;
+
+  /* Text */
+  --color-text: #e2e8f0;
+  --color-text-muted: #7c86a1;
+  --color-text-dim: #4a5270;
+
+  /* Primary (indigo) */
+  --color-primary: #6366f1;
+  --color-primary-hover: #818cf8;
+  --color-primary-muted: rgba(99,102,241,0.15);
+
+  /* Semantic signals */
+  --color-ai: #f43f5e;          /* rose — AI detected */
+  --color-ai-muted: rgba(244,63,94,0.12);
+  --color-human: #10b981;       /* emerald — human */
+  --color-human-muted: rgba(16,185,129,0.12);
+  --color-uncertain: #f59e0b;   /* amber — uncertain */
+  --color-uncertain-muted: rgba(245,158,11,0.12);
+
+  /* Status */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #38bdf8;
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --text-xs: 0.7rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Shapes */
+  --radius-sm: 5px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 10px 30px rgba(0,0,0,0.5);
+  --shadow-glow-primary: 0 0 20px rgba(99,102,241,0.25);
+
+  /* Transitions */
+  --transition-fast: 0.12s ease;
+  --transition-base: 0.2s ease;
+  --transition-slow: 0.35s ease;
+}

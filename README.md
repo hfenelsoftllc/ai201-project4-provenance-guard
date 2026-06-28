@@ -48,7 +48,7 @@ ai201-project4-provenance-guard/
         └── labels.py        # Transparency label generation (3 variants)
 ```
 
-> **Note:** This is the project skeleton. All files contain design documentation and function stubs only. No implementation code is present.
+> **Implementation status:** All milestones (3 → 5) are complete. The API is fully functional.
 
 ---
 
@@ -62,6 +62,7 @@ ai201-project4-provenance-guard/
 | Rate limiting | Flask-Limiter >= 3.5.0 | Requires `storage_uri` param |
 | Audit log | SQLite (built-in) or JSON | No additional setup |
 | Secrets | python-dotenv 1.0.1 | Never commit .env |
+| API docs | flasgger >= 0.9.7 | Swagger UI at `/apidocs` |
 
 ---
 
@@ -72,6 +73,7 @@ ai201-project4-provenance-guard/
 | POST | /submit | Submit content for attribution analysis | Yes |
 | POST | /appeal | File an appeal for a prior classification | No |
 | GET | /log | Return recent audit log entries as JSON | No |
+| GET | /apidocs | Interactive Swagger UI (OpenAPI 2.0) | No |
 
 ---
 
@@ -103,7 +105,15 @@ We encourage you to consider the context. If you are the creator and believe thi
 
 ---
 
-## Setup (for when implementation is complete)
+## Rate Limiting
+
+`POST /submit` is rate-limited per IP address: **10 requests/minute** and **100 requests/day**.
+
+**Reasoning:** A typical creator uploading their own work might submit 2–5 pieces in a session, several times per day — 100/day is generous. 10/minute prevents scripted flooding without blocking a human submitting in quick succession. In production these limits would be keyed on `creator_id` (after authentication) rather than IP for greater accuracy.
+
+---
+
+## Setup
 
 ```bash
 # 1. Clone the repository
