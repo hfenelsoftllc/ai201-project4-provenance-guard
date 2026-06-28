@@ -2,7 +2,7 @@
 # Transparency label generator — three variants, texts are part of public contract.
 # Label text also appears verbatim in README.md and planning.md.
 
-from app.utils.confidence import ATTRIBUTION_LIKELY_AI, ATTRIBUTION_LIKELY_HUMAN
+from app.utils.confidence import ATTRIBUTION_LIKELY_AI, ATTRIBUTION_LIKELY_HUMAN, ATTRIBUTION_UNCERTAIN
 
 LABEL_LIKELY_AI = (
     "AI-Assisted Content\n"
@@ -28,24 +28,11 @@ LABEL_UNCERTAIN = (
 _LABEL_MAP = {
     ATTRIBUTION_LIKELY_AI: LABEL_LIKELY_AI,
     ATTRIBUTION_LIKELY_HUMAN: LABEL_LIKELY_HUMAN,
-    "uncertain": LABEL_UNCERTAIN,
+    ATTRIBUTION_UNCERTAIN: LABEL_UNCERTAIN,
 }
 
 
-def generate_label(attribution: str, confidence: float) -> str:
-    """
-    Return the exact transparency label text for the given attribution.
-
-    Args:
-        attribution: One of "likely_ai", "likely_human", "uncertain".
-        confidence: Float 0.0–1.0 (unused in dispatch but kept for signature parity).
-
-    Returns:
-        Exact label text string.
-
-    Raises:
-        ValueError: If attribution is not a recognized value.
-    """
+def generate_label(attribution: str) -> str:
     label = _LABEL_MAP.get(attribution)
     if label is None:
         raise ValueError(f"Unknown attribution value: {attribution!r}")
