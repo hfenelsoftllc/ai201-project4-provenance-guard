@@ -3,22 +3,29 @@ import pytest
 from unittest.mock import patch
 from app.main import create_app
 from app.models import audit_log
+from app.models import creators as creators_model
 
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(audit_log, "DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setattr(creators_model, "DB_PATH", str(tmp_path / "test.db"))
     audit_log._init()
+    creators_model._init()
     app = create_app()
     app.config["TESTING"] = True
     with app.test_client() as c:
         yield c
 
 
-def _submit(client, text="hello world", creator_id="u1", llm=0.9, stylo=0.9):
+def _submit(client, text="hello world", creator_id="u1", llm=0.9, stylo=0.9, rep=0.9,
+            content_type="text"):
     with patch("app.routes.submit.classify_with_llm", return_value=llm), \
-         patch("app.routes.submit.classify_with_stylometrics", return_value=stylo):
-        return client.post("/submit", json={"text": text, "creator_id": creator_id})
+         patch("app.routes.submit.classify_with_stylometrics", return_value=stylo), \
+         patch("app.routes.submit.classify_with_repetition", return_value=rep):
+        return client.post("/submit", json={
+            "text": text, "creator_id": creator_id, "content_type": content_type
+        })
 
 
 # ── POST /submit ─────────────────────────────────────────────────────────────
@@ -121,3 +128,71 @@ def test_log_limit_param(client):
         _submit(client)
     r = client.get("/log?limit=2")
     assert len(r.get_json()["entries"]) == 2
+
+
+# ── POST /verify ──────────────────────────────────────────────────────────────
+
+def test_verify_missing_fields_400(client):
+    r = client.post("/verify", json={})
+    assert r.status_code == 400
+
+
+def test_verify_creates_pending(client):
+    r = client.post("/verify", json={"creator_id": "creator1", "attestation": "I am human."})
+    assert r.status_code == 201
+    assert r.get_json()["status"] == "pending"
+
+
+def test_verify_duplicate_409(client):
+    client.post("/verify", json={"creator_id": "creator1", "attestation": "first"})
+    r = client.post("/verify", json={"creator_id": "creator1", "attestation": "second"})
+    assert r.status_code == 409
+
+
+def test_verify_approve_success(client):
+    client.post("/verify", json={"creator_id": "creator1", "attestation": "I am human."})
+    r = client.post("/verify/creator1/approve")
+    assert r.status_code == 200
+    assert r.get_json()["status"] == "verified"
+
+
+def test_verify_approve_not_found_404(client):
+    r = client.post("/verify/nobody/approve")
+    assert r.status_code == 404
+
+
+# ── GET /dashboard ────────────────────────────────────────────────────────────
+
+def test_dashboard_returns_200(client):
+    r = client.get("/dashboard")
+    assert r.status_code == 200
+
+
+def test_dashboard_shape(client):
+    r = client.get("/dashboard")
+    data = r.get_json()
+    assert "total_submissions" in data
+    assert "attribution_distribution" in data
+    assert "appeal_rate" in data
+    assert "signal_agreement_rate" in data
+
+
+def test_dashboard_reflects_submissions(client):
+    _submit(client, llm=1.0, stylo=1.0, rep=1.0)
+    _submit(client, llm=0.0, stylo=0.0, rep=0.0)
+    r = client.get("/dashboard")
+    data = r.get_json()
+    assert data["total_submissions"] == 2
+
+
+# ── S4: content_type ──────────────────────────────────────────────────────────
+
+def test_submit_image_description_accepted(client):
+    r = _submit(client, content_type="image_description")
+    assert r.status_code == 200
+    assert r.get_json()["content_type"] == "image_description"
+
+
+def test_submit_default_content_type_is_text(client):
+    r = _submit(client)
+    assert r.get_json()["content_type"] == "text"

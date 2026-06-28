@@ -17,14 +17,27 @@ CREATE TABLE IF NOT EXISTS audit_log (
     stylometric_score REAL NOT NULL,
     status            TEXT NOT NULL DEFAULT 'classified',
     appeal_reasoning  TEXT,
-    appeal_timestamp  TEXT
+    appeal_timestamp  TEXT,
+    repetition_score  REAL DEFAULT 0.5,
+    content_type      TEXT NOT NULL DEFAULT 'text'
 )
 """
+
+# Migrations for existing databases that predate the new columns.
+_MIGRATIONS = [
+    "ALTER TABLE audit_log ADD COLUMN repetition_score REAL DEFAULT 0.5",
+    "ALTER TABLE audit_log ADD COLUMN content_type TEXT NOT NULL DEFAULT 'text'",
+]
 
 
 def _init():
     conn = sqlite3.connect(DB_PATH)
     conn.execute(_SCHEMA)
+    for migration in _MIGRATIONS:
+        try:
+            conn.execute(migration)
+        except sqlite3.OperationalError:
+            pass  # column already exists
     conn.commit()
     conn.close()
 
@@ -44,10 +57,12 @@ def write_entry(entry: dict) -> None:
             """
             INSERT INTO audit_log
                 (content_id, creator_id, timestamp, attribution, confidence,
-                 llm_score, stylometric_score, status, appeal_reasoning, appeal_timestamp)
+                 llm_score, stylometric_score, status, appeal_reasoning, appeal_timestamp,
+                 repetition_score, content_type)
             VALUES
                 (:content_id, :creator_id, :timestamp, :attribution, :confidence,
-                 :llm_score, :stylometric_score, :status, :appeal_reasoning, :appeal_timestamp)
+                 :llm_score, :stylometric_score, :status, :appeal_reasoning, :appeal_timestamp,
+                 :repetition_score, :content_type)
             """,
             {
                 "content_id": entry["content_id"],
@@ -60,6 +75,8 @@ def write_entry(entry: dict) -> None:
                 "status": entry.get("status", "classified"),
                 "appeal_reasoning": entry.get("appeal_reasoning"),
                 "appeal_timestamp": entry.get("appeal_timestamp"),
+                "repetition_score": entry.get("repetition_score", 0.5),
+                "content_type": entry.get("content_type", "text"),
             },
         )
 
@@ -111,3 +128,34 @@ def update_appeal(content_id: str, reasoning: str) -> bool:
             (reasoning, now, content_id),
         )
     return True
+
+
+def get_analytics() -> dict:
+    """Return aggregate analytics derived from the audit log."""
+    with _connect() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+        dist_rows = conn.execute(
+            "SELECT attribution, COUNT(*) as cnt FROM audit_log GROUP BY attribution"
+        ).fetchall()
+        appeals = conn.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE status = 'under_review'"
+        ).fetchone()[0]
+        agree = conn.execute(
+            """SELECT COUNT(*) FROM audit_log
+               WHERE (llm_score > 0.5 AND stylometric_score > 0.5)
+                  OR (llm_score < 0.5 AND stylometric_score < 0.5)"""
+        ).fetchone()[0]
+
+    distribution = {"likely_ai": 0, "likely_human": 0, "uncertain": 0}
+    for row in dist_rows:
+        distribution[row["attribution"]] = row["cnt"]
+
+    appeal_rate = round(appeals / total, 4) if total > 0 else 0.0
+    agreement_rate = round(agree / total, 4) if total > 0 else 0.0
+
+    return {
+        "total_submissions": total,
+        "attribution_distribution": distribution,
+        "appeal_rate": appeal_rate,
+        "signal_agreement_rate": agreement_rate,
+    }

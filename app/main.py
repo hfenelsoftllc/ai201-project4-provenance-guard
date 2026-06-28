@@ -30,8 +30,10 @@ _SWAGGER_TEMPLATE = {
         "title": "Provenance Guard API",
         "description": (
             "Backend attribution service for AI content detection on creative platforms. "
-            "Classifies text as likely_ai, likely_human, or uncertain using a two-signal "
-            "pipeline (Groq LLM + stylometric heuristics)."
+            "Classifies text as likely_ai, likely_human, or uncertain using a three-signal "
+            "pipeline (Groq LLM + stylometric heuristics + repetition density). "
+            "Includes provenance certificates (S2), analytics dashboard (S3), and "
+            "multi-modal support for image descriptions (S4)."
         ),
         "version": "1.0.0",
         "contact": {"email": "fhyac001@fiu.edu"},
@@ -55,10 +57,14 @@ def create_app():
     from app.routes.submit import submit_bp
     from app.routes.appeal import appeal_bp
     from app.routes.log import log_bp
+    from app.routes.verify import verify_bp
+    from app.routes.dashboard import dashboard_bp
 
     app.register_blueprint(submit_bp)
     app.register_blueprint(appeal_bp)
     app.register_blueprint(log_bp)
+    app.register_blueprint(verify_bp)
+    app.register_blueprint(dashboard_bp)
 
     # Rate limiting: POST /submit only — 10/min and 100/day per IP
     limiter.limit("10 per minute; 100 per day")(submit_bp)
