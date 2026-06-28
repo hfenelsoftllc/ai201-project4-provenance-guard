@@ -156,7 +156,7 @@ def _empty_state(icon, msg):
 def _alert(msg, kind="success"):
     colors = {"success": ("#10b981", "rgba(16,185,129,.1)", "rgba(16,185,129,.25)"),
               "error":   ("#f43f5e", "rgba(244,63,94,.1)",  "rgba(244,63,94,.25)")}
-    c, bg, border = colors.get(kind, colors["success"])
+    c, bg, border = colors[kind]
     return f'<div style="padding:12px 16px;background:{bg};border:1px solid {border};border-radius:8px;font-size:13px;color:{c};font-family:system-ui;line-height:1.5">{msg}</div>'
 
 
@@ -174,7 +174,7 @@ def analyze_content(text, creator_id):
 
     stylo_score = classify_with_stylometrics(text)
     confidence, attribution = compute_confidence(llm_score, stylo_score)
-    label = generate_label(attribution, confidence)
+    label = generate_label(attribution)
     content_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -225,8 +225,7 @@ def show_panel(target):
 
 
 def show_log_panel():
-    entries = audit_log.get_entries(limit=50)
-    return gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), _log_table(entries)
+    return (*show_panel("log"), _log_table(audit_log.get_entries(limit=50)))
 
 
 # ── CSS ─────────────────────────────────────────────────────────────────────
@@ -371,9 +370,6 @@ LOGO_HTML = """
   </div>
 </div>"""
 
-NAV_SECTION_HTML = '<div style="padding:8px 16px 4px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#4a5270;font-weight:700;font-family:\'Inter\',system-ui">Detection</div>'
-HISTORY_SECTION_HTML = '<div style="padding:12px 16px 4px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#4a5270;font-weight:700;font-family:\'Inter\',system-ui">History</div>'
-
 SIDEBAR_FOOTER_HTML = """
 <div style="padding:16px;border-top:1px solid #272b42;position:absolute;bottom:0;left:0;right:0;background:#151826">
   <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#4a5270;font-family:system-ui">
@@ -395,10 +391,10 @@ with gr.Blocks(title="Provenance Guard") as demo:
         # ── Sidebar ────────────────────────────────────────────────────────
         with gr.Column(scale=1, min_width=240, elem_id="sidebar-col"):
             gr.HTML(LOGO_HTML)
-            gr.HTML(NAV_SECTION_HTML)
+            gr.HTML('<div style="padding:8px 16px 4px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#4a5270;font-weight:700;font-family:\'Inter\',system-ui">Detection</div>')
             nav_analyze = gr.Button("🔍  Analyze Content", elem_id="nav-analyze")
             nav_appeal  = gr.Button("📝  File Appeal",     elem_id="nav-appeal")
-            gr.HTML(HISTORY_SECTION_HTML)
+            gr.HTML('<div style="padding:12px 16px 4px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#4a5270;font-weight:700;font-family:\'Inter\',system-ui">History</div>')
             nav_log = gr.Button("📋  Audit Log", elem_id="nav-log")
             gr.HTML(SIDEBAR_FOOTER_HTML)
 

@@ -22,11 +22,18 @@ CREATE TABLE IF NOT EXISTS audit_log (
 """
 
 
+def _init():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(_SCHEMA)
+    conn.commit()
+    conn.close()
+
+_init()
+
+
 def _connect():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute(_SCHEMA)
-    conn.commit()
     return conn
 
 

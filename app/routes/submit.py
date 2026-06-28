@@ -76,7 +76,7 @@ def submit():
 
     stylometric_score = classify_with_stylometrics(text)
     confidence, attribution = compute_confidence(llm_score, stylometric_score)
-    label = generate_label(attribution, confidence)
+    label = generate_label(attribution)
 
     content_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()
