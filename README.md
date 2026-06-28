@@ -25,27 +25,32 @@ ai201-project4-provenance-guard/
 ├── planning.md              # Architecture, spec, and AI tool plan (written before implementation)
 ├── README.md                # This file
 ├── requirements.txt         # Python dependencies
+├── gradio_ui.py             # Gradio UI (split-panel sidebar + verdict card)
 ├── .env.example             # Environment variable template (copy to .env, never commit .env)
 ├── .gitignore               # Python gitignore
-└── app/
-    ├── __init__.py          # Application package
-    ├── main.py              # Flask app factory and entry point
-    ├── routes/
-    │   ├── __init__.py
-    │   ├── submit.py        # POST /submit — content attribution endpoint
-    │   ├── appeal.py        # POST /appeal — creator appeal endpoint
-    │   └── log.py           # GET /log — audit log endpoint
-    ├── signals/
-    │   ├── __init__.py
-    │   ├── llm_signal.py    # Signal 1: Groq LLM semantic classification
-    │   └── stylometric_signal.py  # Signal 2: Pure-Python stylometric heuristics
-    ├── models/
-    │   ├── __init__.py
-    │   └── audit_log.py     # Audit log persistence (SQLite or JSON)
-    └── utils/
-        ├── __init__.py
-        ├── confidence.py    # Confidence scoring: combines signal outputs
-        └── labels.py        # Transparency label generation (3 variants)
+├── app/
+│   ├── __init__.py          # Application package
+│   ├── main.py              # Flask app factory and entry point
+│   ├── routes/
+│   │   ├── submit.py        # POST /submit — content attribution endpoint
+│   │   ├── appeal.py        # POST /appeal — creator appeal endpoint
+│   │   └── log.py           # GET /log — audit log endpoint
+│   ├── signals/
+│   │   ├── llm_signal.py    # Signal 1: Groq LLM semantic classification
+│   │   └── stylometric_signal.py  # Signal 2: Pure-Python stylometric heuristics
+│   ├── models/
+│   │   └── audit_log.py     # Audit log persistence (SQLite)
+│   └── utils/
+│       ├── confidence.py    # Confidence scoring: combines signal outputs
+│       └── labels.py        # Transparency label generation (3 variants)
+└── tests/
+    ├── test_confidence.py       # Threshold boundary regression tests
+    ├── test_labels.py           # Label dispatch and contract strings
+    ├── test_stylometric_signal.py # Normalization, short-text guard
+    ├── test_llm_signal.py       # Injectable mock client, score clamping
+    ├── test_audit_log.py        # DB read/write, appeal state machine
+    ├── test_routes.py           # Flask test client: all HTTP paths
+    └── test_gradio_ui.py        # html.escape() XSS guards
 ```
 
 > **Implementation status:** All milestones (3 → 5) are complete. The API is fully functional.
@@ -132,8 +137,33 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env and add your GROQ_API_KEY
 
-# 5. Run the app
+# 5. Run the Flask API
 python -m app.main
+
+# 6. Run the Gradio UI (optional, separate terminal)
+python gradio_ui.py
+```
+
+---
+
+## Testing
+
+70 tests, no `GROQ_API_KEY` required — all LLM calls are mocked via an injectable client.
+
+```bash
+pytest tests/ -v
+```
+
+The suite specifically guards the load-bearing design decisions: threshold boundaries, signal weights, label dispatch, DB state transitions, and XSS escaping in the Gradio UI.
+
+```
+tests/test_confidence.py      — 0.65 → likely_ai, 0.64 → uncertain (and all boundaries)
+tests/test_labels.py          — label text contract and ValueError on unknown attribution
+tests/test_stylometric_signal.py — short-text neutral fallback, normalization bounds
+tests/test_llm_signal.py      — mock client injection, score clamping, parse errors
+tests/test_audit_log.py       — write/read, appeal 409 guard, limit/ordering
+tests/test_routes.py          — all HTTP status codes via Flask test client
+tests/test_gradio_ui.py       — html.escape() on creator_id, status, content_id
 ```
 
 ---
